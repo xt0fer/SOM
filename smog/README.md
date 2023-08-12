@@ -18,3 +18,8 @@ This is the first golang porject I'm thinking thru that is being done in the <sm
 ### LSP support for SOM
 
 There is an LSP support for _vscode_ [effortless-language-servers](https://marketplace.visualstudio.com/items?itemName=MetaConcProject.effortless-language-servers)
+
+### Why did you organize the SOM code differently?
+
+See #4 in[Structuring Applications in Go](https://www.gobeyond.dev/structuring-applications/).
+We all need to be golang coders like Ben Johnson.
