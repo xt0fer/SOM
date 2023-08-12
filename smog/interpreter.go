@@ -35,3 +35,19 @@ func NewInterpreter(u *Universe) *Interpreter {
 //   previousFrame
 //   stack
 // |
+
+type Frame struct {
+	stackPointer *OOObject
+	bytecodeIndex int 
+	localOffset int 
+	method *OOObject
+	context *OOObject
+	previousFrame *OOObject
+	stack *OOObject
+}
+
+func NewFrame() *Frame {
+	f := &Frame{}
+
+	return f
+}

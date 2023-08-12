@@ -49,8 +49,6 @@ type Universe struct {
 	avoidExit     bool
 }
 
-type Frame struct{}
-
 // UNIVERSE
 
 func (u *Universe) Exit(code int) {

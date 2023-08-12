@@ -14,15 +14,64 @@ type Sender interface {
 // SSymbol = SString (
 // 	| numSignatureArguments |
 
-// SObject
+// SObject = SAbstractObject (
+// 	| fields clazz |
+
 type SObject struct {
 	OOObject
 	Fields []*OOObject
 	Clazz  *SClass
 }
 
-// SObject = SAbstractObject (
-// 	| fields clazz |
+// initialize: numberOfFields with: nilObject = (
+//     fields := Array new: numberOfFields withAll: nilObject
+//   )
+
+//   somClass = (
+//     ^ clazz
+//   )
+
+//   somClass: aSClass = (
+//     clazz := aSClass
+//   )
+
+//   somClassIn: universe = (
+//     ^ clazz
+//   )
+
+//   fieldName: index = (
+//     "Get the name of the field with the given index"
+//     ^ clazz instanceFieldName: index
+//   )
+
+//   fieldIndex: name = (
+//     "Get the index for the field with the given name"
+//     ^ clazz lookupFieldIndex: name
+//   )
+
+//   numberOfFields = (
+//     "Get the number of fields in this object"
+//     ^ fields length
+//   )
+
+//   field: index = (
+//     "Get the field with the given index"
+//     ^ fields at: index
+//   )
+
+//   field: index put: value = (
+//     "Set the field with the given index to the given value"
+//     fields at: index put: value
+//   )
+
+//   "For using in debugging tools such as the Diassembler"
+//   debugString = ( ^ 'SObject(' + clazz name string + ')' )
+
+//   ----
+
+//   new: numberOfFields with: nilObject = (
+//     ^ self new initialize: numberOfFields with: nilObject
+//   )
 
 // ??
 type Invokable *OOObject
@@ -55,4 +104,27 @@ type SSymbol struct {
 type SString struct {
 	SObject
 	S string
+}
+
+func (S *SString) string() string { return S.S }
+
+// "For using in debugging tools such as the Diassembler"
+func (S *SString) debugString() string {
+	t := "SString(" + S.S + ")"
+	return t
+}
+
+// somClassIn: universe = (
+//
+//	  ^ universe stringClass
+//	)
+func (S *SString) somClassIn(u *Universe) *SClass {
+	return S.SObject.Clazz
+}
+
+// initializeWith: aString = (
+func NewString(aString string) *SString {
+	s := &SString{}
+	s.S = aString
+	return s
 }
