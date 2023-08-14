@@ -39,7 +39,7 @@ import "os"
 // avoidExit := false
 // )
 
-type ObjToObjMap map[Object]Object
+type ObjToObjMap map[*Object]*Object
 
 type Universe struct {
 	symbolTable   ObjToObjMap
