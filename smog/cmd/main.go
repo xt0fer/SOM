@@ -12,13 +12,3 @@ func main() {
 	u.Interpret(args2)
 	u.Exit(0)
 }
-
-// Main = (
-// 	run: args = (
-// 	  | u args2 |
-// 	  u := Universe new.
-// 	  args2 := args copyFrom: 2.
-// 	  u interpret: args2.
-// 	  u exit: 0.
-// 	)
-//   )

@@ -1,30 +1,33 @@
 package smog
 
-// OOObject - an attempt to make All objects in this project this struct tied to its interface
-type OOObject struct {
+type Sender interface {
+	send(selectorString string, arguments []Object, universe *Universe, interpreter *Interpreter)
+	sendDoesNotUnderstand(selector string, universe *Universe, interpreter *Interpreter)
+	sendUnknownGlobal(globalName *Object, universe *Universe, interpreter *Interpreter)
+	sendEscapedBlock(block *Object, universe *Universe, interpreter *Interpreter)
 }
 
 type Object interface {
-	somClass() *SClass
-	setSomClass(aSClass *SClass)
+	Sender
+	somClass() Class
+	setSomClass(aSClass Class)
 }
 
 type Class interface {
-	Object
 	initialize(aUniverse *Universe)
 	initializeIn(numberOfFields int32, aUniverse *Universe)
-	superClass() *SClass
-	setSuperClass(aSClass *SClass)
+	superClass() Class
+	setSuperClass(aSClass Class)
 	hasSuperClass() bool
 	name() *SSymbol
-	setName(aSSymbol *SSymbol)
-	instanceFields() []*Object
+	setName(aSSymbol SSymbol)
+	instanceFields() []Object
 	setInstanceFields(aSArray *Array)
 	instanceInvokables() *Array
 	setInstanceInvokables(aSArray *Array)
 	numberOfInstanceInvokables() int32
 	instanceInvokable(idx int32) *Object
-	instanceInvokablePut(idx int32, aSInvokable *SInvokable)
+	instanceInvokablePut(idx int32, aSInvokable *Invokable)
 	lookupInvokable(signature *SString) *Object
 	lookupFieldIndex(fieldName *Object) int32
 	addInstanceInvokable(value *Object)
@@ -41,7 +44,7 @@ type Class interface {
 }
 
 type Array interface {
-	Class
+	Object
 	initializeWithAnd(length int32, object *Object)
 	somClassIn(universe *Universe) *SClass
 	indexableField(idx int32) *Object
@@ -53,13 +56,6 @@ type Array interface {
 	// new: length with: nilObject = (
 }
 
-type Sender interface {
-	send(selectorString string, arguments []*OOObject, universe *Universe, interpreter *Interpreter)
-	sendDoesNotUnderstand(selector string, universe *Universe, interpreter *Interpreter)
-	sendUnknownGlobal(globalName *OOObject, universe *Universe, interpreter *Interpreter)
-	sendEscapedBlock(block *OOObject, universe *Universe, interpreter *Interpreter)
-}
-
 // SSymbol = SString (
 // 	| numSignatureArguments |
 
@@ -67,15 +63,32 @@ type Sender interface {
 // 	| fields clazz |
 
 type SObject struct {
-	Fields []Object
+	Object
+	Fields []*Object
 	Clazz  *SClass
 }
 
-func NewSObject(n int32, with *OOObject) *SObject {
+func NewSObject(n int32, with *SObject) *SObject {
 	so := &SObject{}
-	so.Fields = make([]Object, n)
+	so.Fields = make([]*Object, n)
 
 	return so
+}
+
+func (so *SObject) initializeWith(numberOfFields int32, obj Object) {
+	for i := range so.Fields {
+		so.Fields[i] = &obj
+	}
+	//so.Clazz =
+}
+
+func (self *SObject) send(selectorString string, arguments []Object, universe *Universe, interpreter *Interpreter) {
+}
+func (self *SObject) sendDoesNotUnderstand(selector string, universe *Universe, interpreter *Interpreter) {
+}
+func (self *SObject) sendUnknownGlobal(globalName *Object, universe *Universe, interpreter *Interpreter) {
+}
+func (self *SObject) sendEscapedBlock(block *Object, universe *Universe, interpreter *Interpreter) {
 }
 
 // initialize: numberOfFields with: nilObject = (
@@ -87,7 +100,7 @@ func NewSObject(n int32, with *OOObject) *SObject {
 //	^ clazz
 //
 // )
-func (so *SObject) somClass() *SClass {
+func (so SObject) somClass() *SClass {
 	return so.Clazz
 }
 
@@ -96,7 +109,7 @@ func (so *SObject) somClass() *SClass {
 //	clazz := aSClass
 //
 // )
-func (so *SObject) setSomClass(aSClass *SClass) {
+func (so SObject) setSomClass(aSClass *SClass) {
 	so.Clazz = aSClass
 }
 
@@ -140,7 +153,7 @@ func (so *SObject) fieldIndex(name string) int32 {
 //	^ fields at: index
 //
 // )
-func (so *SObject) field(index int32) Object {
+func (so *SObject) field(index int32) *Object {
 	return so.Fields[index]
 }
 
@@ -150,17 +163,14 @@ func (so *SObject) field(index int32) Object {
 //	fields at: index put: value
 //
 // )
-func (so *SObject) fieldPut(index int32, value Object) Object {
+func (so *SObject) fieldPut(index int32, value *Object) {
 	so.Fields[index] = value
 }
-
-//   "For using in debugging tools such as the Diassembler"
-//   debugString = ( ^ 'SObject(' + clazz name string + ')' )
 
 //   ----
 
 // ??
-type Invokable *OOObject
+type Invokable *Object
 
 // SClass = SObject (
 //
@@ -169,12 +179,27 @@ type Invokable *OOObject
 //	  name
 //	  instanceInvokables instanceFields|
 type SClass struct {
-	SObject
+	*SObject
 	Universe       *Universe
 	SuperClass     *SClass
 	Name           *SSymbol
 	InstanceFields []Invokable
 }
+
+func NewSClass(numberOfFields int32, u *Universe) *SClass {
+	sc := &SClass{}
+	return sc
+}
+
+func (sc *SClass) initializeIn(numberOfFields int32, u *Universe) {
+	sc.Universe = u
+	sc.Object.initializeWith(numberOfFields, u.NilObject)
+}
+
+// initialize: numberOfFields in: aUniverse = (
+//     super initialize: numberOfFields with: aUniverse nilObject.
+//     universe := aUniverse
+//   )
 
 // SSymbol = SString (
 //

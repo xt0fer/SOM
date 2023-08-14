@@ -39,7 +39,7 @@ import "os"
 // avoidExit := false
 // )
 
-type ObjToObjMap map[*OOObject]*OOObject
+type ObjToObjMap map[Object]Object
 
 type Universe struct {
 	symbolTable   ObjToObjMap
@@ -47,6 +47,20 @@ type Universe struct {
 	interpreter   *Interpreter
 	dumpBytecodes bool
 	avoidExit     bool
+
+	//
+	NilObject Object
+}
+
+func NewUniverse() *Universe {
+	nu := &Universe{}
+
+	return nu
+}
+
+func (u *Universe) initialize() {
+	no := SObject{}
+	u.NilObject = &no
 }
 
 // UNIVERSE

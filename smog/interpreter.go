@@ -37,13 +37,13 @@ func NewInterpreter(u *Universe) *Interpreter {
 // |
 
 type Frame struct {
-	stackPointer *OOObject
-	bytecodeIndex int 
-	localOffset int 
-	method *OOObject
-	context *OOObject
-	previousFrame *OOObject
-	stack *OOObject
+	stackPointer  Object
+	bytecodeIndex int
+	localOffset   int
+	method        Object
+	context       Object
+	previousFrame Object
+	stack         Object
 }
 
 func NewFrame() *Frame {
