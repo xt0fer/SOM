@@ -8,12 +8,12 @@ import (
 func TestNewSObject(t *testing.T) {
 	type args struct {
 		n    int32
-		with *SObject
+		with *Object
 	}
 	tests := []struct {
 		name string
 		args args
-		want *SObject
+		want *Object
 	}{
 		// TODO: Add test cases.
 		{"first object", args{1, nil}, NewSObject(1, nil)},
@@ -36,7 +36,7 @@ func TestNewSClass(t *testing.T) {
 	tests := []struct {
 		name string
 		args args
-		want *SClass
+		want *Class
 	}{
 		// TODO: Add test cases.
 		{"first class", args{1, u}, NewSClass(1, u)},

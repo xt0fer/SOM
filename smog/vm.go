@@ -2,54 +2,36 @@ package smog
 
 import "os"
 
-// | symbolTable globals classPath dumpBytecodes interpreter
-
-// avoidExit
-// lastExitCode
-// exitBlock
-
-// nilObject
-// trueObject
-// falseObject
-
-// objectClass
-// classClass
-// metaclassClass
-
-// nilClass
-// integerClass
-// arrayClass
-// methodClass
-// symbolClass
-// primClass
-// stringClass
-// systemClass
-// blockClass
-// doubleClass
-
-// trueClass
-// falseClass
-// |
-
-// initialize = (
-// symbolTable := Dictionary new.
-// globals := Dictionary new.
-// interpreter := Interpreter new: self.
-// dumpBytecodes := false.
-// avoidExit := false
-// )
-
-type ObjToObjMap map[*Object]*Object
+type stringToObjMap map[string]*Object
 
 type Universe struct {
-	symbolTable   ObjToObjMap
-	globals       ObjToObjMap
+	symbolTable   map[string]*Symbol
+	globals       map[string]*Object
 	interpreter   *Interpreter
 	dumpBytecodes bool
 	avoidExit     bool
 
 	//
-	NilObject Object
+	NilObject   *Object
+	TrueObject  *Object
+	FalseObject *Object
+
+	//
+	NilClass       *Class
+	ObjectClass    *Class
+	ClassClass     *Class
+	SystemClass    *Class
+	MetaclassClass *Class
+	BlockClass     *Class
+	MethodClass    *Class
+	PrimitiveClass *Class
+	ArrayClass     *Class
+	DoubleClass    *Class
+	StringClass    *Class
+	SymbolClass    *Class
+
+	TrueClass  *Class
+	FalseClass *Class
 }
 
 func NewUniverse() *Universe {
@@ -58,8 +40,10 @@ func NewUniverse() *Universe {
 }
 
 func (u *Universe) initialize() {
+	u.symbolTable = make(map[string]*Symbol)
+	u.globals = make(map[string]*Object)
 
-	u.NilObject = SObject{}
+	u.NilObject = &Object{}
 }
 
 // UNIVERSE
@@ -69,4 +53,13 @@ func (u *Universe) Exit(code int) {
 }
 func (u *Universe) Interpret(args []string) {
 
+}
+
+func (u *Universe) symbolFor(name string) *Symbol {
+	if result, ok := u.symbolTable[name]; ok {
+		return result
+	}
+	ns := NewSymbol(name, 0)
+	u.symbolTable[name] = ns
+	return ns
 }

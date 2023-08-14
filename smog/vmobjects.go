@@ -96,8 +96,8 @@ type ClassInterface interface {
 	superClass() ClassInterface                                           // get superclass
 	setSuperClass(aSClass ClassInterface)                                 // set superclass
 	hasSuperClass() bool                                                  // confirm superclass
-	name() *Symbol                                                       // get classname
-	setName(aSymbol Symbol)                                             // set classname
+	name() *Symbol                                                        // get classname
+	setName(aSymbol Symbol)                                               // set classname
 	instanceFields() []ObjectInterface                                    // get array of instance field names? or objects?
 	setInstanceFields(aSArray ArrayInterface)                             // set array of instance fields
 	instanceInvokables() ArrayInterface                                   // get array of invokables (methods and blocks?)
@@ -105,7 +105,7 @@ type ClassInterface interface {
 	numberOfInstanceInvokables() int32                                    // get size of invokables array
 	instanceInvokable(idx int32) ObjectInterface                          // get invokable at idx
 	instanceInvokablePut(idx int32, aSInvokable Invokable)                // set invokable at idx
-	lookupInvokable(signature *String) ObjectInterface                   // get invokable by symbol name
+	lookupInvokable(signature *String) ObjectInterface                    // get invokable by symbol name
 	lookupFieldIndex(fieldName ObjectInterface) int32                     // get index of invokable by name
 	addInstanceInvokable(value ObjectInterface)                           // add an Invokable method to array
 	addInstancePrimitive(value ObjectInterface)                           // add a Primitive to Invokable array
@@ -140,11 +140,12 @@ type Object struct {
 }
 
 type Class struct {
-	Universe       *Universe   // where it is defined, as a singleton
-	SuperClass     *Class      // immediate superclass of this class
-	Name           *Symbol     // name(string) of the class
+	*Object
+	Universe           *Universe   // where it is defined, as a singleton
+	SuperClass         *Class      // immediate superclass of this class
+	Name               *Symbol     // name(string) of the class
 	InstanceInvokables []Invokable // all the pretty horses (all the Methods, Primitives, ...???)
-	InstanceFields []*Symbol       // template for InstanceFields, the index of the Name is the index within the Object.
+	InstanceFields     []*Symbol   // template for InstanceFields, the index of the Name is the index within the Object.
 }
 
 type Symbol struct { // used for SomSymbol as well as model string
@@ -165,28 +166,30 @@ type Double struct {
 }
 
 type Method struct {
-	Signature *Symbol // symbol with method signature in it
-	Holder *Object
-    Bytecodes []byte // bytecode array, code to be run when method invoked.
-	Literals []string // array of symbols as literals #()
-    NumberOfLocals int32 // number of local objects
-	MaximumNumberOfStackElements int32 // limit on Stack??
+	Signature                    *Symbol  // symbol with method signature in it
+	Holder                       *Object  // what Class is this attached to?
+	Bytecodes                    []byte   // bytecode array, code to be run when method invoked.
+	Literals                     []string // array of symbols as literals #()
+	NumberOfLocals               int32    // number of local objects
+	MaximumNumberOfStackElements int32    // limit on Stack??
 
 }
+
 // For instance, in usage,
 // bootstrapMethod := self newMethod: (self symbolFor: 'bootstrap')
 //      bc: #(#halt) literals: #() numLocals: 0 maxStack: 2.
 
 type Primitive struct {
-	Signature *Symbol
-	Holder *Object
-	IsEmpty bool
-	Operation // Is this the code
+	Signature *Symbol // something like "of:at:argN:"
+	Holder    *Object // what Class is this attached to?
+	IsEmpty   bool    // not sure
+	Operation *Block  // Is this the code run for primitive?
 }
+
 type Block struct { // not sure what these are just yet
-	Method *Method	// method which implements the bytecodes
-	Context *Universe // this seems to be the Universe
-	blockClass *Class // which block class?
+	Method     *Method   // method which implements the bytecodes
+	Context    *Universe // this seems to be the Universe
+	blockClass *Class    // which block class?
 }
 
 // SSymbol = SString (
@@ -201,7 +204,7 @@ type Block struct { // not sure what these are just yet
 // 	Clazz  Class
 // }
 
-func NewSObject(n int32, with *Object) *Object {
+func NewObject(n int32, with *Object) *Object {
 	so := &Object{}
 	so.Fields = make([]*Object, n)
 	so.initializeWith(n, with)
@@ -250,15 +253,7 @@ func (so *Object) fieldPut(index int32, value *Object) {
 // ??
 type Invokable *Object
 
-// type SClass struct {
-// 	Object
-// 	Universe       *Universe
-// 	SuperClass     *SClass
-// 	Name           *SSymbol
-// 	InstanceFields []Invokable
-// }
-
-func NewSClass(numberOfFields int32, u *Universe) *Class {
+func NewClass(numberOfFields int32, u *Universe) *Class {
 	sc := &Class{}
 	sc.Object = &Object{}
 	return sc
@@ -269,25 +264,11 @@ func (sc *Class) initializeIn(numberOfFields int32, u *Universe) {
 	sc.Object.initializeWith(numberOfFields, u.NilObject)
 }
 
-// SSymbol = SString (
-//
-//	| numSignatureArguments |
-// type SSymbol struct {
-// 	SString
-// 	NumSignatureArguments int32
-// }
-
 func NewSymbol(value string, n int32) *Symbol {
 	ss := &Symbol{}
-	ss.Name = *NewString(value)
+	ss.Name = value
 	return ss
 }
-
-// SString = SAbstractObject (
-// type SString struct {
-// 	SObject
-// 	S string
-// }
 
 func NewString(aString string) *String {
 	s := &String{}
@@ -299,7 +280,7 @@ func (s *String) initialize(aString string) {
 	s.String = aString
 }
 
-func (S *String) string() string { return S.S }
+func (S *String) StringValue() string { return S.String}
 
 // "For using in debugging tools such as the Diassembler"
 func (S *String) debugString() string {
