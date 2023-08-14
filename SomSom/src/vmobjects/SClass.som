@@ -2,7 +2,9 @@ SClass = SObject (
   | universe
     superClass
     name
-    instanceInvokables instanceFields|
+    instanceInvokables 
+    instanceFields
+  |
 
   initialize: aUniverse = (
     universe := aUniverse

@@ -54,13 +54,12 @@ type Universe struct {
 
 func NewUniverse() *Universe {
 	nu := &Universe{}
-
 	return nu
 }
 
 func (u *Universe) initialize() {
-	no := SObject{}
-	u.NilObject = &no
+
+	u.NilObject = SObject{}
 }
 
 // UNIVERSE
