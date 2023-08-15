@@ -2,8 +2,6 @@ package smog
 
 import "os"
 
-type stringToObjMap map[string]*Object
-
 type Universe struct {
 	symbolTable   map[string]*Symbol
 	globals       map[*Symbol]*Object
@@ -45,6 +43,9 @@ func NewUniverse() *Universe {
 func (u *Universe) initialize() {
 	u.symbolTable = make(map[string]*Symbol)
 	u.globals = make(map[*Symbol]*Object)
+	u.dumpBytecodes = false
+	u.avoidExit = false
+	u.interpreter = NewInterpreter(u)
 	u.initializeObjectSystem()
 
 }
@@ -85,39 +86,29 @@ func (u *Universe) NewSystemClass() *Class {
 func (u *Universe) InitializeSystemClass(systemClass *Class, superClass *Class, name string) {
 	// "Initialize the superclass hierarchy"
 	if superClass != nil {
-		//         systemClass superClass: superClass.
-		//         systemClass somClass superClass: (superClass somClass) ]
 		systemClass.setSuperClass(superClass)
 		systemClass.SomClass().setSuperClass(superClass.SomClass())
 	} else {
-		//         systemClass somClass superClass: classClass ].
 		systemClass.SomClass().setSuperClass(u.ClassClass)
 	}
 
 	// "Initialize the array of instance fields"
-	//
-	//	systemClass instanceFields: (self newArray: 0).
 	systemClass.SetInstancesFields(0)
-	// systemClass somClass instanceFields: (self newArray: 0).
 	systemClass.SomClass().SetInstancesFields(0)
 
 	// "Initialize the array of instance invokables"
 	//
-	//	systemClass instanceInvokables: (self newArray: 0).
 	systemClass.SetInstanceInvokables(0)
-	// systemClass somClass instanceInvokables: (self newArray: 0).
 	systemClass.SomClass().SetInstanceInvokables(0)
 
 	// "Initialize the name of the system class"
 	//
-	//	systemClass name: (self symbolFor: name).
 	systemClass.SetName(u.symbolFor(name))
-	// systemClass somClass name: (self symbolFor: name + ' class').
 	systemClass.SomClass().SetName(u.symbolFor(name + " class"))
 
 	// "Insert the system class into the dictionary of globals"
-	//     self global: systemClass name put: systemClass.
 	u.setGlobal(systemClass.Name, systemClass.Object)
+
 }
 
 func (u *Universe) LoadSystemClass(sc *Class) {
@@ -134,7 +125,7 @@ func (u *Universe) setGlobal(sym *Symbol, obj *Object) {
 	u.globals[sym] = obj
 }
 
-func (u *Universe) initializeObjectSystem() {
+func (u *Universe) initializeObjectSystem() *Object {
 	//     | trueSymbol falseSymbol systemObject |
 
 	// "Allocate the nil object"
@@ -196,59 +187,90 @@ func (u *Universe) initializeObjectSystem() {
 	u.BlockClass.SetName(u.symbolFor("Block"))
 
 	//     "Setup the true and false objects"
-	//     trueSymbol := self symbolFor: 'True'.
 	trueSymbol := u.symbolFor("True")
 	//     trueClass := self loadClass: trueSymbol.
 	u.TrueClass = NewClass(0, u)
 	u.TrueClass.SetName(trueSymbol)
-	//     trueObject := self newInstance: trueClass.
 	u.TrueObject = u.NewInstance(u.TrueClass)
-	//     falseSymbol := self symbolFor: 'False'.
 	falseSymbol := u.symbolFor("False")
 	//     falseClass := self loadClass: falseSymbol.
 	u.FalseClass = NewClass(0, u)
 	u.FalseClass.SetName(falseSymbol)
-	//     falseObject := self newInstance: falseClass.
 	u.FalseObject = u.NewInstance(u.FalseClass)
 
 	//     "Load the system class and create an instance of it"
-	//     systemClass := self loadClass: (self symbolFor: 'System').
 	u.SystemClass = NewClass(0, u)
 	u.SystemClass.SetName(u.symbolFor("System"))
-	//     systemObject := self newInstance: systemClass.
 	u.systemObject = u.NewInstance(u.SystemClass)
 
 	//     "Put special objects and classes into the dictionary of globals"
-	//u.Iglobal: (self symbolFor: 'nil') put: nilObject.
 	u.setGlobal(u.symbolFor("nil"), u.NilObject)
-	// u.Iglobal: (self symbolFor: 'true') put: trueObject.
 	u.setGlobal(u.symbolFor("true"), u.TrueObject)
-	// u.Iglobal: (self symbolFor: 'false') put: falseObject.
 	u.setGlobal(u.symbolFor("false"), u.FalseObject)
-	// u.Iglobal: (self symbolFor: 'system') put: systemObject.
-	// u.setGlobal("system", u.)
-	// u.Iglobal: (self symbolFor: 'System') put: systemClass.
+	u.setGlobal(u.symbolFor("system"), u.systemObject)
 	u.setGlobal(u.symbolFor("System"), u.SystemClass.Object)
-	// u.Iglobal: (self symbolFor: 'Block') put: blockClass.
 	u.setGlobal(u.symbolFor("Block"), u.BlockClass.Object)
-	// u.Iglobal: trueSymbol  put: trueClass.
 	u.setGlobal(trueSymbol, u.TrueClass.Object)
 	u.setGlobal(falseSymbol, u.FalseClass.Object)
-	// u.Iglobal: falseSymbol put: falseClass.
-	//     ^ systemObject
-
+	return u.systemObject
 }
 
-// newInstance: instanceClass = (
-//     | result |
-//     result := SObject new: instanceClass numberOfInstanceFields with: nilObject.
-//     result somClass: instanceClass.
-
-//	^ result
-//
-// )
 func (u *Universe) NewInstance(c *Class) *Object {
 	result := NewObject(c.NumberOfInstanceFields(), u.NilObject)
 	result.SetSomClass(c)
 	return result
+}
+
+
+type Interpreter struct {
+	universe *Universe
+	frame    *Frame
+}
+
+func NewInterpreter(u *Universe) *Interpreter {
+	ii := &Interpreter{}
+	ii.universe = u
+	return ii
+}
+
+// "
+// Frame layout:
+// +-----------------+
+// | Arguments       | 1
+// +-----------------+
+// | Local Variables | <-- localOffset
+// +-----------------+
+// | Stack           | <-- stackPointer
+// | ...             |
+// +-----------------+
+// "
+// |
+//   "Points at the top element"
+//   stackPointer
+//   bytecodeIndex
+
+//   "the offset at which local variables start"
+//   localOffset
+
+//   method
+//   context
+//   previousFrame
+//   stack
+// |
+
+type Frame struct {
+	
+	StackPointer  *Object
+	BytecodeIndex int
+	LocalOffset   int
+	Method        *Object
+	Context       *Object
+	PreviousFrame *Frame
+	Stack         *Object
+}
+
+func NewFrame() *Frame {
+	f := &Frame{}
+
+	return f
 }
