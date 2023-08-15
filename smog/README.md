@@ -24,6 +24,8 @@ This _smog_ is a 1.5v attempt. 1.0 was to tranliterate Java/C to golang. That wa
 
 - [ ] Add tests to Step 1 work
 - [ ] Build a first draft of the bytecode interpreter.
+  - [ ] build out `Frame`
+  - [ ] build out `Interpreter`
 - [ ] Add the ability to load primitives into the ObjectSystem.
 - [ ] Build out `Class` methods
 - [ ] Build out `Method` methods
