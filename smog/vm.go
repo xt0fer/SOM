@@ -1,6 +1,9 @@
 package smog
 
-import "os"
+import (
+	"log"
+	"os"
+)
 
 type Universe struct {
 	symbolTable   map[string]*Symbol
@@ -262,18 +265,17 @@ type Frame struct {
 	BytecodeIndex int32
 	LocalOffset   int32
 	Method        *Method
-	ContextObj    *Object
+	ContextObj    *Frame
 	PreviousFrame *Frame
 	Stack         []*Object
 }
 
 func NewFrame() *Frame {
 	f := &Frame{}
-
 	return f
 }
 
-func (f *Frame) initialize(aNil *Object, prevFrame *Frame, contextFrame *Object, aMethod *Method, maxStack int32) {
+func (f *Frame) Initialize(aNil *Object, prevFrame *Frame, contextFrame *Frame, aMethod *Method, maxStack int32) {
 	f.PreviousFrame = prevFrame
 	f.ContextObj = contextFrame
 	f.Method = aMethod
@@ -282,51 +284,44 @@ func (f *Frame) initialize(aNil *Object, prevFrame *Frame, contextFrame *Object,
 	f.BytecodeIndex = 1 // should be Zero?
 }
 
-//   previousFrame = (
-//     ^ previousFrame
-//   )
+func (f *Frame) GetPreviousFrame() *Frame { return f.PreviousFrame }
 
 func (f *Frame) ClearPreviousFrame()    { f.PreviousFrame = nil }
 func (f *Frame) HasPreviousFrame() bool { return f.PreviousFrame != nil }
 func (f *Frame) IsBootstrapFrame() bool { return !f.HasPreviousFrame() }
 
-//   context = (
-//     ^ context
-//   )
+func (f *Frame) GetContext() *Frame {
+	return f.ContextObj
+}
 
 func (f *Frame) HasContext() bool { return f.ContextObj != nil }
 
-//   context: level = (
-//     | frame |
-//     "Get the context frame at the given level"
-//     frame := self.
+// "Get the context frame at the given level"
+func (f *Frame) GetContextAt(level int32) *Frame {
+	frame := f
+	// "Iterate through the context chain until the given level is reached"
+	for level > 0 {
+		// "Get the context of the current frame"
+		frame = f.GetContext()
+		// "Go to the next level"
+		level = level - 1
+	}
+	return frame
+}
 
-//     "Iterate through the context chain until the given level is reached"
-//     [level > 0] whileTrue: [
-//       "Get the context of the current frame"
-//       frame := frame context.
+// "Compute the outer context of this frame"
+func (f *Frame) OuterContext() *Frame {
+	frame := f
+	//     "Iterate through the context chain until null is reached"
+	for frame.HasContext() {
+		frame = frame.GetContext()
+	}
+	return frame
+}
 
-//       "Go to the next level"
-//       level := level - 1 ].
-
-//     ^ frame
-//   )
-
-//   outerContext = (
-//     | frame |
-//     "Compute the outer context of this frame"
-//     frame := self.
-
-//     "Iterate through the context chain until null is reached"
-//     [frame hasContext] whileTrue: [
-//       frame := frame context ].
-
-//     ^ frame
-//   )
-
-//   method = (
-//     ^ method
-//   )
+func (f *Frame) GetMethod() *Method {
+	return f.Method
+}
 
 // "Pop an object from the expression stack and return it"
 func (f *Frame) Pop() *Object {
@@ -340,7 +335,6 @@ func (f *Frame) Push(obj *Object) {
 	sp := f.StackPointer + 1
 	f.Stack[sp] = obj
 	f.StackPointer = sp
-	return
 }
 
 func (f *Frame) ResetStackPointer() {
@@ -350,10 +344,12 @@ func (f *Frame) ResetStackPointer() {
 	f.StackPointer = f.LocalOffset + f.Method.NumberOfLocals - 1
 }
 
-//   bytecodeIndex = (
-//     "Get the current bytecode index for this frame"
-//     ^ bytecodeIndex
-//   )
+//	"Get the current bytecode index for this frame"
+//
+// OR just call f.BytecodeIndex
+func (f *Frame) GetBytecodeIndex() int32 {
+	return f.BytecodeIndex
+}
 
 // "Set the current bytecode index for this frame"
 func (f *Frame) SetBytecodeIndex(index int32) {
@@ -367,85 +363,60 @@ func (f *Frame) GetStackElement(index int32) *Object {
 	return f.Stack[index]
 }
 
-//   stackElement: index put: value = (
-//     "Set the stack element with the given index to the given value
-//      (an index of zero yields the top element)"
-//     stack at: stackPointer - index put: value
-//   )
-
-// local: index = (
+// "Set the stack element with the given index to the given value
 //
-//	^ stack at: localOffset + index - 1
-//
-// )
-func (f *Frame) Local(index int32) *Object {
-	return nil //// Stopped here/
+//	(an index of zero yields the top element)"
+func (f *Frame) PutStackElement(index int32, value *Object) {
+	f.Stack[f.StackPointer-index] = value
 }
 
-//   local: index put: value = (
-//     stack at: localOffset + index - 1 put: value
-//   )
+// Locals
+func (f *Frame) GetLocal(index int32) *Object {
+	return f.Stack[f.LocalOffset+index+1]
+}
+func (f *Frame) PutLocal(index int32, value *Object) {
+	f.Stack[f.LocalOffset+index-1] = value
+}
 
-//   local: index at: contextLevel = (
-//     "Get the local with the given index in the given context"
-//     ^ (self context: contextLevel) local: index
-//   )
+func (f *Frame) GetLocalAt(index int32, level int32) *Object {
+	return f.GetContextAt(level).GetLocal(index)
+}
+func (f *Frame) PutLocalAt(index int32, level int32, value *Object) {
+	f.GetContextAt(level).PutLocal(index, value)
+}
 
-//   local: index at: contextLevel put: value = (
-//     "Set the local with the given index in the given context to the given value"
-//     (self context: contextLevel) local: index put: value
-//   )
+// Arguments
+func (f *Frame) GetArgument(index int32) *Object {
+	return f.Stack[index]
+}
+func (f *Frame) PutArgument(index int32, value *Object) {
+	f.Stack[index] = value
+}
 
-//   argument: index = (
-//     ^ stack at: index
-//   )
+func (f *Frame) GetArgumentAt(index int32, level int32) *Object {
+	return f.GetContextAt(level).GetArgument(index)
+}
+func (f *Frame) PutArgumentAt(index int32, level int32, value *Object) {
+	f.GetContextAt(level).PutArgument(index, value)
+}
 
-//   argument: index put: value = (
-//     ^ stack at: index put: value
-//   )
-
-//   argument: index at: contextLevel = (
-//     | context |
-//     "Get the context"
-//     context := self context: contextLevel.
-
-//     "Get the argument with the given index"
-//     ^ context argument: index
-//   )
-
-//   argument: index at: contextLevel put: value = (
-//     | context |
-//     "Get the context"
-//     context := self context: contextLevel.
-
-//     "Set the argument with the given index to the given value"
-//     context argument: index put: value
-//   )
-
-//   copyArgumentsFrom: frame = (
-//     | numArgs |
 //     "copy arguments from frame:
 //      - arguments are at the top of the stack of frame.
 //      - copy them into the argument area of the current frame"
-//     numArgs := method numberOfArguments.
-//     0 to: numArgs - 1 do: [:i |
-//       stack at: i + 1 put: (frame stackElement: numArgs - 1 - i) ]
-//   )
+func (f *Frame) CopyArgumentsFrom(frame *Frame) {
+	numArgs := len(f.Method.Array.Fields)
+	for i := 0; i < numArgs - 1; i++ {
+		f.Stack[i+1] = frame.GetStackElement(int32(numArgs - 1 - i))
+	}
+}
 
-//   printStackTrace = (
-//     | className methodName |
+func (f *Frame) PrintStackTrace() {
 //     "Print a stack trace starting in this frame"
-//     self hasPreviousFrame ifTrue: [
-//       previousFrame printStackTrace ].
+	if f.HasPreviousFrame() {
+		f.PreviousFrame.PrintStackTrace()
+	}
+	className := f.Method.Holder.Clazz.Name
+	methodName := f.Method.Signature.Name
+	log.Printf("%s>>#%s @bi: %d\n",className,methodName,f.BytecodeIndex)
+}
 
-//     className := method holder name string.
-//     methodName := method signature string.
-//     Universe println: className + '>>#' + methodName + ' @bi: ' + bytecodeIndex
-//   )
-
-//   ----
-
-//   new: nilObject previous: prevFrame context: contextFrame method: aSMethod maxStack: stackElements = (
-//     ^ self new initialize: nilObject previous: prevFrame context: contextFrame method: aSMethod maxStack: stackElements
-//   )
-// )
