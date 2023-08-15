@@ -1,6 +1,9 @@
 package smog
 
-import "fmt"
+import (
+	"fmt"
+	"log"
+)
 
 /**
 * Some ideas on how to break the log-jam
@@ -95,7 +98,8 @@ type Class struct {
 }
 
 type Symbol struct { // used for SomSymbol as well as model string
-	Name string // className, instanceFieldName, globalName, methodSignature, primitive(?)
+	Name      string // className, instanceFieldName, globalName, methodSignature, primitive(?)
+	NumOfArgs int32
 }
 
 type Array struct { // used for a SomArray data structure, not used within the Data Model
@@ -113,13 +117,13 @@ type Double struct {
 }
 
 type Method struct {
-	*Array // used to store the method local objects
-	Signature                    *Symbol  // symbol with method signature in it
-	Holder                       *Object  // what Class is this attached to?
-	Bytecodes                    []byte   // bytecode array, code to be run when method invoked.
-	Literals                     []string // array of symbols as literals #()
-	NumberOfLocals               int32    // number of local objects
-	MaximumNumberOfStackElements int32    // limit on Stack??
+	*Array                         // used to store the method local objects
+	Sig                  *Symbol   // symbol with method signature in it
+	Hold                 *Object   // what Class is this attached to?
+	Bytecodes            []byte    // bytecode array, code to be run when method invoked.
+	Literals             []*Object // array of symbols as literals #()
+	NumOfLocals          int32     // number of local objects
+	MaximumStackElements int32     // limit on Stack??
 }
 
 // For instance, in usage,
@@ -134,9 +138,9 @@ type Primitive struct {
 }
 
 type Block struct { // not sure what these are just yet
-	Method     *Method   // method which implements the bytecodes
-	Context    *Universe // this seems to be the Universe
-	BlockClass *Class    // which block class?
+	Method     *Method // method which implements the bytecodes
+	Context    *Frame  // this seems to be the Universe
+	BlockClass *Class  // which block class?
 }
 
 func NewObject(n int32, with *Object) *Object {
@@ -297,4 +301,168 @@ func (d *Double) DebugString() string {
 
 func (i *Double) SomClassIn(u *Universe) *Class {
 	return u.DoubleClass
+}
+
+// METHOD
+
+func NewMethod() *Method {
+	m := &Method{}
+	return m
+}
+
+// array of literals, NQR
+func (m *Method) InitializeWith(sym *Symbol, bcArray []byte, literalsArray []*Object,
+	numLocals int32, maxStack int32) {
+	m.Sig = sym
+	m.Bytecodes = bcArray
+	m.Literals = literalsArray
+	m.NumOfLocals = numLocals
+	m.MaximumStackElements = maxStack
+}
+
+func (m *Method) GetBytecode(index int32) int32 {
+	return int32(m.Bytecodes[index])
+}
+
+func (m *Method) IsPrimitive() bool {
+	return false
+}
+
+func (m *Method) NumberOfLocals() int32 {
+	return m.NumOfLocals
+}
+
+func (m *Method) MaximumNumberOfStackElements() int32 {
+	return m.MaximumStackElements
+}
+
+func (m *Method) Signature() *Symbol {
+	return m.Sig
+}
+
+func (m *Method) Holder() *Object {
+	return m.Hold
+}
+
+func (m *Method) SetHolder(h *Object) {
+	m.Hold = h
+
+	// literals == nil ifTrue: [ ^ self ].
+	if m.Literals == nil {
+		return
+	}
+
+	panic("Invokables do not have the correct Holder")
+	// "Make sure all nested invokables have the same holder"
+	//
+	//	literals do: [:l |
+	//	  (l class == SMethod or: [l class == SPrimitive]) ifTrue: [
+	//	    l holder: value ] ]
+}
+
+// "Get the constant associated to a given bytecode index"
+func (m *Method) GetConstant(bytecodeIndex int32) *Object {
+	return m.Literals[m.Bytecodes[bytecodeIndex+1]]
+}
+
+func (m *Method) NumberOfArgument() int32 {
+	return m.Sig.NumOfArgs
+}
+
+func (m *Method) NumberOfBytecodes() int32 {
+	return int32(len(m.Bytecodes))
+}
+
+func (m *Method) BytecodeAt(index int32) int32 {
+	return int32(m.Bytecodes[index])
+}
+
+// invoke: frame using: interpreter = (
+//
+//	| newFrame |
+//	newFrame := interpreter pushNewFrame: self.
+//	newFrame copyArgumentsFrom: frame
+//
+// )
+//
+//	"Allocate and push a new frame on the interpreter stack"
+func (m *Method) InvokeUsing(frame *Frame, interpreter *Interpreter) {
+	newFrame := interpreter.PushNewFrame(m)
+
+	newFrame.CopyArgumentsFrom(frame)
+}
+
+func (m *Method) SomClassIn(u *Universe) *Class {
+	return u.MethodClass
+}
+
+// "For using in debugging tools such as the Diassembler"
+// debugString = ( ^ 'SMethod(' + holder name + '>>#' + signature string + ')' )
+func (m *Method) DebugString() {
+	log.Printf("Method(%s>>#%s)\n", m.Holder().Clazz.Name.Name, m.Sig.Name)
+}
+
+// BLOCK
+// Method     *Method   // method which implements the bytecodes
+// Context    *Universe // this seems to be the Universe
+// BlockClass *Class    // which block class?
+
+// new: aSMethod in: aContext with: aBlockClass = (
+func NewBlock(aMethod *Method, aContext *Frame, aBlockClass *Class) *Block {
+	nb := &Block{}
+	nb.Method = aMethod
+	nb.Context = aContext
+	nb.BlockClass = aBlockClass
+	return nb
+}
+
+// 	| method context blockClass |
+
+func (nb *Block) Initialize(aMethod *Method, aContext *Frame, aBlockClass *Class) {
+	nb.Method = aMethod
+	nb.Context = aContext
+	nb.BlockClass = aBlockClass
+}
+func (nb *Block) GetMethod() *Method {
+	return nb.Method
+}
+func (nb *Block) GetContext() *Frame {
+	return nb.Context
+}
+
+func (nb *Block) SomClassIn() *Class {
+	return nb.BlockClass
+}
+
+// 	"For using in debugging tools such as the Diassembler"
+func (m *Block) DebugString() {
+	log.Printf("Block(%s>>#%s)\n", m.Method.Sig.Name)
+}
+
+// 	evaluationPrimitive: numberOfArguments in: universe = (
+// 	  ^ SPrimitive new: (self computeSignatureString: numberOfArguments)
+// 					in: universe
+// 				  with: [:frame :interp |
+// 		  | rcvr context newFrame |
+// 		  "Get the block (the receiver) from the stack"
+// 		  rcvr := frame stackElement: numberOfArguments - 1.
+
+// 		  "Get the context of the block"
+// 		  context := rcvr context.
+
+// 		  "Push a new frame and set its context to be the one specified in
+// 		   the block"
+// 		  newFrame := interp pushNewFrame: rcvr method with: context.
+// 		  newFrame copyArgumentsFrom: frame ]
+// 	)
+
+func (nb *Block) ComputeSignatureString(nArgs int32) string {
+	signatureString := "value"
+	if nArgs > 1 {
+		signatureString = signatureString + ":"
+	}
+	for i := 2; i< int(nArgs); i++ {
+		signatureString = signatureString + "with:"
+	}
+	return signatureString
 }
