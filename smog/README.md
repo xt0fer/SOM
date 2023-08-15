@@ -11,21 +11,22 @@ This _smog_ is a 1.5v attempt. 1.0 was to tranliterate Java/C to golang. That wa
 
 ### Step 0
 
-_What's the go version of hierachical classes?_ Well, because of the _composition_ way of doing things, one can nest _structs_. (but not interfaces.)
-This is the first golang porject I'm thinking thru that is being done in the <smirk> _generics era_ (like baseball's _deadball/liveball_ era divide).
+- [x] _What's the go version of hierachical classes?_ Well, because of the _composition_ way of doing things, one can nest _structs_. (but not interfaces.)
+- [x] This is the first golang porject I'm thinking thru that is being done in the <smirk> _generics era_ (like baseball's _deadball/liveball_ era divide).
 
 ### Step 1
 
-- Build the Universe structs and methods.
-- Create enough Data Model (ObjectSystem) of the running SOMObject(s) to support `initializeObjectSystem() *Object`.
-- At this phase, not all the object/class/etc methods for each struct are built out.
+- [x] Build the Universe structs and methods.
+- [x] Create enough Data Model (ObjectSystem) of the running SOMObject(s) to support `initializeObjectSystem() *Object`.
+- [x] At this phase, not all the object/class/etc methods for each struct are built out.
 
 ### Step 2
 
-- Build a first draft of the bytecode interpreter.
-- Add the ability to load primitives into the ObjectSystem.
-- Build out `Class` methods
-- Build out `Method` methods
+- [ ] Add tests to Step 1 work
+- [ ] Build a first draft of the bytecode interpreter.
+- [ ] Add the ability to load primitives into the ObjectSystem.
+- [ ] Build out `Class` methods
+- [ ] Build out `Method` methods
 
 ...
 
