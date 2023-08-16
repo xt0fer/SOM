@@ -90,7 +90,7 @@ type Object struct {
 }
 
 type Class struct {
-	*Object
+	Object
 	Universe           *Universe   // where it is defined, as a singleton
 	SuperClass         *Class      // immediate superclass of this class
 	Name               *Symbol     // name(string) of the class
@@ -99,32 +99,36 @@ type Class struct {
 }
 
 type Symbol struct { // used for SomSymbol as well as model string
+	Object
 	Name      string // className, instanceFieldName, globalName, methodSignature, primitive(?)
 	NumOfArgs int32
 }
 
 type Array struct { // used for a SomArray data structure, not used within the Data Model
-	*Object
+	Object
 	Elements []*Object
 }
 type String struct { // used to model a SomString
+	Object
 	Value string
 }
 type Integer struct {
+	Object
 	Value int32
 }
 type Double struct {
+	Object
 	Value float64
 }
 
 type Method struct {
-	*Array                     // used to store the method local objects
-	Signature        *Symbol   // symbol with method signature in it
-	Holder           *Object   // what Class is this attached to?
-	Bytecodes        []byte    // bytecode array, code to be run when method invoked.
-	Literals         []*Object // array of symbols as literals #()
-	NumLocals        int32     // number of local objects
-	MaxStackElements int32     // limit on Stack??
+	Array                          // used to store the method local objects
+	Signature        *Symbol       // symbol with method signature in it
+	Holder           *Object       // what Class is this attached to?
+	Bytecodes        []byte        // bytecode array, code to be run when method invoked.
+	Literals         []interface{} // array of symbols as literals #()
+	NumLocals        int32         // number of local objects
+	MaxStackElements int32         // limit on Stack??
 }
 
 // For instance, in usage,
@@ -132,6 +136,7 @@ type Method struct {
 //      bc: #(#halt) literals: #() numLocals: 0 maxStack: 2.
 
 type Primitive struct {
+	Object
 	Signature *Symbol // something like "of:at:argN:"
 	Holder    *Object // what Class is this attached to?
 	IsEmpty   bool    // not sure
@@ -139,6 +144,7 @@ type Primitive struct {
 }
 
 type Block struct { // not sure what these are just yet
+	Object
 	Method     *Method // method which implements the bytecodes
 	Context    *Frame  // this seems to be the Universe
 	BlockClass *Class  // which block class?
@@ -202,7 +208,7 @@ type Invokable *Object
 
 func NewClass(numberOfFields int32, u *Universe) *Class {
 	sc := &Class{}
-	sc.Object = &Object{}
+	//sc.Object = &Object{}
 	return sc
 }
 
@@ -319,7 +325,7 @@ func NewMethod() *Method {
 }
 
 // array of literals, NQR
-func (m *Method) InitializeWith(sym *Symbol, bcArray []byte, literalsArray []*Object,
+func (m *Method) InitializeWith(sym *Symbol, bcArray []byte, literalsArray []interface{},
 	numLocals int32, maxStack int32) {
 	m.Signature = sym
 	m.Bytecodes = bcArray
@@ -369,8 +375,8 @@ func (m *Method) SetHolder(h *Object) {
 }
 
 // "Get the constant associated to a given bytecode index"
-func (m *Method) GetConstant(bytecodeIndex int32) *Object {
-	return m.Literals[m.Bytecodes[bytecodeIndex+1]]
+func (m *Method) Constant(bytecodeIndex int32) *Object {
+	return m.Literals[m.Bytecodes[bytecodeIndex+1]].(*Object)
 }
 
 func (m *Method) NumberOfArguments() int32 {

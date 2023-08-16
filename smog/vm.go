@@ -1,13 +1,14 @@
 package smog
 
 import (
+	"fmt"
 	"log"
 	"os"
 )
 
 type Universe struct {
 	symbolTable   map[string]*Symbol
-	globals       map[*Symbol]*Object
+	Globals       map[*Symbol]*Object
 	interpreter   *Interpreter
 	dumpBytecodes bool
 	avoidExit     bool
@@ -45,7 +46,7 @@ func NewUniverse() *Universe {
 
 func (u *Universe) initialize() {
 	u.symbolTable = make(map[string]*Symbol)
-	u.globals = make(map[*Symbol]*Object)
+	u.Globals = make(map[*Symbol]*Object)
 	u.dumpBytecodes = false
 	u.avoidExit = false
 	u.interpreter = NewInterpreter(u)
@@ -73,15 +74,15 @@ func (u *Universe) symbolFor(name string) *Symbol {
 
 func (u *Universe) NewMetaclassClass() *Class {
 	result := NewClass(0, u)
-	result.SetSomClass(NewClass(0, u))
-	result.SomClass().SetSomClass(result)
+	result.Clazz = NewClass(0, u)
+	result.Clazz.Clazz = result
 	return result
 }
 
 func (u *Universe) NewSystemClass() *Class {
 	systemClass := NewClass(0, u)
-	systemClass.SetSomClass(NewClass(0, u))
-	systemClass.SomClass().SetSomClass(u.MetaclassClass)
+	systemClass.Clazz = NewClass(0, u)
+	systemClass.Clazz.Clazz = u.MetaclassClass
 	return systemClass
 }
 
@@ -90,27 +91,27 @@ func (u *Universe) InitializeSystemClass(systemClass *Class, superClass *Class, 
 	// "Initialize the superclass hierarchy"
 	if superClass != nil {
 		systemClass.setSuperClass(superClass)
-		systemClass.SomClass().setSuperClass(superClass.SomClass())
+		systemClass.Clazz.setSuperClass(superClass.Clazz)
 	} else {
-		systemClass.SomClass().setSuperClass(u.ClassClass)
+		systemClass.Clazz.setSuperClass(u.ClassClass)
 	}
 
 	// "Initialize the array of instance fields"
 	systemClass.SetInstancesFields(0)
-	systemClass.SomClass().SetInstancesFields(0)
+	systemClass.Clazz.SetInstancesFields(0)
 
 	// "Initialize the array of instance invokables"
 	//
 	systemClass.SetInstanceInvokables(0)
-	systemClass.SomClass().SetInstanceInvokables(0)
+	systemClass.Clazz.SetInstanceInvokables(0)
 
 	// "Initialize the name of the system class"
 	//
-	systemClass.SetName(u.symbolFor(name))
-	systemClass.SomClass().SetName(u.symbolFor(name + " class"))
+	systemClass.Name = u.symbolFor(name)
+	systemClass.Clazz.Name = u.symbolFor(name + " class")
 
 	// "Insert the system class into the dictionary of globals"
-	u.setGlobal(systemClass.Name, systemClass.Object)
+	u.setGlobal(systemClass.Name, &systemClass.Object)
 
 }
 
@@ -124,8 +125,31 @@ func (u *Universe) LoadSystemClass(sc *Class) {
 	//   result loadPrimitives ].
 }
 
+func (u *Universe) LoadClass(name *Symbol, sc *Class) *Class {
+	//     "Try loading the class from all different paths"
+	panic("No class loaded for " + name.Name)
+	//return nil
+}
+
+// loadClass: name into: systemClass = (
+//     "Try loading the class from all different paths"
+//     classPath do: [:cpEntry |
+//       | result |
+//       "Load the class from a file and return the loaded class"
+//       result := SourcecodeCompiler compileClass: cpEntry name: name string into: systemClass in: self.
+
+//       (result notNil and: dumpBytecodes) ifTrue: [
+//         Disassembler dump: result somClass in: self.
+//         Disassembler dump: result in: self ].
+
+//       result ifNotNil: [ ^ result ] ].
+
+//     "The class could not be found."
+//     ^ nil
+//   )
+
 func (u *Universe) setGlobal(sym *Symbol, obj *Object) {
-	u.globals[sym] = obj
+	u.Globals[sym] = obj
 }
 
 func (u *Universe) initializeObjectSystem() *Object {
@@ -150,7 +174,7 @@ func (u *Universe) initializeObjectSystem() *Object {
 	u.SystemClass = u.NewSystemClass()
 
 	//     "Setup the class reference for the nil object"
-	u.NilObject.SetSomClass(u.NilClass)
+	u.NilObject.Clazz = u.NilClass
 	//     "Initialize the system classes."
 	u.InitializeSystemClass(u.ObjectClass, u.NilClass, "Object")
 	u.InitializeSystemClass(u.ClassClass, u.ObjectClass, "Class")
@@ -187,23 +211,23 @@ func (u *Universe) initializeObjectSystem() *Object {
 
 	//u.BlockClass.LoadClass(u.symbolFor("Block"))
 	u.BlockClass = NewClass(0, u)
-	u.BlockClass.SetName(u.symbolFor("Block"))
+	u.BlockClass.Name = u.symbolFor("Block")
 
 	//     "Setup the true and false objects"
 	trueSymbol := u.symbolFor("True")
 	//     trueClass := self loadClass: trueSymbol.
 	u.TrueClass = NewClass(0, u)
-	u.TrueClass.SetName(trueSymbol)
+	u.TrueClass.Name = trueSymbol
 	u.TrueObject = u.NewInstance(u.TrueClass)
 	falseSymbol := u.symbolFor("False")
 	//     falseClass := self loadClass: falseSymbol.
 	u.FalseClass = NewClass(0, u)
-	u.FalseClass.SetName(falseSymbol)
+	u.FalseClass.Name = falseSymbol
 	u.FalseObject = u.NewInstance(u.FalseClass)
 
 	//     "Load the system class and create an instance of it"
 	u.SystemClass = NewClass(0, u)
-	u.SystemClass.SetName(u.symbolFor("System"))
+	u.SystemClass.Name = u.symbolFor("System")
 	u.systemObject = u.NewInstance(u.SystemClass)
 
 	//     "Put special objects and classes into the dictionary of globals"
@@ -211,41 +235,43 @@ func (u *Universe) initializeObjectSystem() *Object {
 	u.setGlobal(u.symbolFor("true"), u.TrueObject)
 	u.setGlobal(u.symbolFor("false"), u.FalseObject)
 	u.setGlobal(u.symbolFor("system"), u.systemObject)
-	u.setGlobal(u.symbolFor("System"), u.SystemClass.Object)
-	u.setGlobal(u.symbolFor("Block"), u.BlockClass.Object)
-	u.setGlobal(trueSymbol, u.TrueClass.Object)
-	u.setGlobal(falseSymbol, u.FalseClass.Object)
+	u.setGlobal(u.symbolFor("System"), &u.SystemClass.Object)
+	u.setGlobal(u.symbolFor("Block"), &u.BlockClass.Object)
+	u.setGlobal(trueSymbol, &u.TrueClass.Object)
+	u.setGlobal(falseSymbol, &u.FalseClass.Object)
 	return u.systemObject
 }
 
 func (u *Universe) NewInstance(c *Class) *Object {
 	result := NewObject(c.NumberOfInstanceFields(), u.NilObject)
-	result.SetSomClass(c)
+	result.Clazz = c
 	return result
 }
 
 // newBlock: method with: context numArgs: arguments = (
-//     ^ SBlock new: method in: context with: (self blockClass: arguments)
-//   )
+//
+//	  ^ SBlock new: method in: context with: (self blockClass: arguments)
+//	)
 func (u *Universe) NewBlock(m *Method, context *Frame, numArgs int32) *Block {
 	result := NewBlock(m, context, u.blockClass(numArgs))
 	return result
 }
 
 func (u *Universe) blockClass(numArgs int32) *Class {
-	name := u.symbolFor("Block"+numArgs)
-	if g, ok := u.globals(name), ok {
+	name := u.symbolFor("Block" + string(numArgs))
+	if g, ok := u.Globals[name]; ok {
 		return g.Clazz
 	}
 	result := u.LoadClass(name, nil)
 	// "Add the appropriate value primitive to the block class"
-	result.AddInstancePrimitive()
-//       (SBlock evaluationPrimitive: numberOfArguments in: self).
+	//result.AddInstancePrimitive()
+	//       (SBlock evaluationPrimitive: numberOfArguments in: self).
 
-	u.globals[name] = result
+	u.Globals[name] = &result.Object
 	return result
 
 }
+
 // blockClass: numberOfArguments = (
 //     | name result |
 //     "Determine the name of the block class with the given number of arguments"
@@ -264,9 +290,6 @@ func (u *Universe) blockClass(numArgs int32) *Class {
 //     self global: name put: result.
 //     ^ result
 //   )
-
-
-
 
 type Interpreter struct {
 	universe *Universe
@@ -309,9 +332,9 @@ type Frame struct {
 	BytecodeIndex int32
 	LocalOffset   int32
 	Method        *Method
-	ContextObj    *Frame
+	Context       *Frame
 	PreviousFrame *Frame
-	Stack         []*Object
+	Stack         []interface{}
 }
 
 func NewFrame() *Frame {
@@ -323,7 +346,7 @@ func (f *Frame) Initialize(aNil *Object, prevFrame *Frame, contextFrame *Frame, 
 	f.PreviousFrame = prevFrame
 	f.Context = contextFrame
 	f.Method = aMethod
-	f.Stack = make([]*Object, maxStack)
+	f.Stack = make([]interface{}, maxStack)
 	f.ResetStackPointer()
 	f.BytecodeIndex = 1 // should be Zero?
 }
@@ -346,7 +369,7 @@ func (f *Frame) ContextAt(level int32) *Frame {
 	// "Iterate through the context chain until the given level is reached"
 	for level > 0 {
 		// "Get the context of the current frame"
-		frame = f.GetContext()
+		frame = f.Context
 		// "Go to the next level"
 		level = level - 1
 	}
@@ -371,7 +394,7 @@ func (f *Frame) OuterContext() *Frame {
 func (f *Frame) Pop() *Object {
 	sp := f.StackPointer
 	f.StackPointer -= 1
-	return f.Stack[sp]
+	return f.Stack[sp].(*Object)
 }
 
 // "Push an object onto the expression stack"
@@ -385,7 +408,7 @@ func (f *Frame) ResetStackPointer() {
 	// "arguments are stored in front of local variables"
 	f.LocalOffset = int32(len(f.Method.Array.Fields) + 1)
 	// "Set the stack pointer to its initial value thereby clearing the stack"
-	f.StackPointer = f.LocalOffset + f.Method.NumberOfLocals - 1
+	f.StackPointer = f.LocalOffset + f.Method.NumLocals - 1
 }
 
 //	"Get the current bytecode index for this frame"
@@ -416,32 +439,32 @@ func (f *Frame) PutStackElement(index int32, value *Object) {
 
 // Locals
 func (f *Frame) Local(index int32) *Object {
-	return f.Stack[f.LocalOffset+index+1]
+	return f.Stack[f.LocalOffset+index+1].(*Object)
 }
 func (f *Frame) PutLocal(index int32, value *Object) {
 	f.Stack[f.LocalOffset+index-1] = value
 }
 
 func (f *Frame) LocalAt(index int32, level int32) *Object {
-	return f.GetContextAt(level).GetLocal(index)
+	return f.ContextAt(level).Local(index)
 }
 func (f *Frame) PutLocalAt(index int32, level int32, value *Object) {
-	f.GetContextAt(level).PutLocal(index, value)
+	f.ContextAt(level).PutLocal(index, value)
 }
 
 // Arguments
 func (f *Frame) Argument(index int32) *Object {
-	return f.Stack[index]
+	return f.Stack[index].(*Object)
 }
 func (f *Frame) PutArgument(index int32, value *Object) {
 	f.Stack[index] = value
 }
 
 func (f *Frame) ArgumentAt(index int32, level int32) *Object {
-	return f.GetContextAt(level).GetArgument(index)
+	return f.ContextAt(level).Argument(index)
 }
 func (f *Frame) PutArgumentAt(index int32, level int32, value *Object) {
-	f.GetContextAt(level).PutArgument(index, value)
+	f.ContextAt(level).PutArgument(index, value)
 }
 
 // "copy arguments from frame:
@@ -450,7 +473,7 @@ func (f *Frame) PutArgumentAt(index int32, level int32, value *Object) {
 func (f *Frame) CopyArgumentsFrom(frame *Frame) {
 	numArgs := len(f.Method.Array.Fields)
 	for i := 0; i < numArgs-1; i++ {
-		f.Stack[i+1] = frame.StackElement[int32(numArgs - 1 - i)]
+		f.Stack[i+1] = frame.Stack[int32(numArgs-1-i)]
 	}
 }
 
@@ -467,7 +490,7 @@ func (f *Frame) PrintStackTrace() {
 // INTERPRETER
 
 func (p *Interpreter) DoDup() {
-	p.frame.Push(p.frame.StackElement[0])
+	p.frame.Push(p.frame.Stack[0].(*Object))
 }
 
 // doPushLocal: bytecodeIndex = (
@@ -479,8 +502,8 @@ func (p *Interpreter) DoDup() {
 // )
 func (p *Interpreter) DoPushLocal(bytecodeIndex int32) {
 	p.frame.Push(
-		p.frame.LocalAt(p.frame.Method.Bytecodes[p.frame.BytecodeIndex+1],
-			p.frame.Method.Bytecodes[p.frame.BytecodeIndex+2]))
+		p.frame.LocalAt(int32(p.frame.Method.Bytecodes[p.frame.BytecodeIndex+1]),
+			int32(p.frame.Method.Bytecodes[p.frame.BytecodeIndex+2])))
 }
 
 // doPushArgument: bytecodeIndex = (
@@ -492,8 +515,8 @@ func (p *Interpreter) DoPushLocal(bytecodeIndex int32) {
 // )
 func (p *Interpreter) DoPushArgument(bytecodeIndex int32) {
 	p.frame.Push(
-		p.frame.ArgumentAt(p.frame.Method.Bytecodes[p.frame.BytecodeIndex+1],
-			p.frame.Method.Bytecodes[p.frame.BytecodeIndex+2]))
+		p.frame.ArgumentAt(int32(p.frame.Method.Bytecodes[p.frame.BytecodeIndex+1]),
+			int32(p.frame.Method.Bytecodes[p.frame.BytecodeIndex+2])))
 }
 
 //   doPushField: bytecodeIndex = (
@@ -505,8 +528,8 @@ func (p *Interpreter) DoPushArgument(bytecodeIndex int32) {
 //
 // )
 func (p *Interpreter) DoPushField(bytecodeIndex int32) {
-	fieldIndex := p.frame.Method.Bytecodes[p.frame.BytecodeIndex + 1]
-	p.frame.Push(p.GetSelf().Field(fieldIndex))
+	fieldIndex := p.frame.Method.Bytecodes[p.frame.BytecodeIndex+1]
+	p.frame.Push(p.GetSelf().Fields[fieldIndex])
 }
 
 //     blockMethod := frame method constant: bytecodeIndex.
@@ -519,8 +542,14 @@ func (p *Interpreter) DoPushField(bytecodeIndex int32) {
 
 // "Push a new block with the current frame as context onto the stack"
 func (p *Interpreter) DoPushBlock(bytecodeIndex int32) {
-	blockMethod := p.frame.Method.Constant[bytecodeIndex]
-	p.frame.Push(p.universe.NewBlock(blockMethod, p.frame, p.frame.Method.NumberOfArguments()))
+	var item interface{}
+	item = p.frame.Method.Constant(bytecodeIndex)
+	blockMethod, ok := item.(*Method)
+	if !ok {
+		fmt.Printf("method type is wrong!")
+		os.Exit(1)
+	}
+	p.frame.Push(&(p.universe.NewBlock(blockMethod, p.frame, p.frame.Method.NumberOfArguments()).BlockClass.Object))
 }
 
 //   doPushConstant: bytecodeIndex = (
@@ -541,37 +570,80 @@ func (p *Interpreter) DoPushBlock(bytecodeIndex int32) {
 //         self getSelf sendUnknownGlobal: globalName in: universe using: self ]
 //   )
 
-//   doPop = (
-//     frame pop
-//   )
+// doPop = (
+//
+//	frame pop
+//
+// )
+func (p *Interpreter) DoPop() *Object {
+	return p.frame.Pop()
+}
 
-//   doPopLocal: bytecodeIndex = (
-//     frame local: (frame method bytecode: bytecodeIndex + 1)
-//              at: (frame method bytecode: bytecodeIndex + 2)
-//             put: frame pop
-//   )
+// doPopLocal: bytecodeIndex = (
+//
+//	frame local: (frame method bytecode: bytecodeIndex + 1)
+//	         at: (frame method bytecode: bytecodeIndex + 2)
+//	        put: frame pop
+//
+// )
+func (p *Interpreter) DoPopLocal(bytecodeIndex int32) {
+	p.frame.PutLocalAt(int32(p.frame.Method.Bytecodes[p.frame.BytecodeIndex+1]),
+		int32(p.frame.Method.Bytecodes[p.frame.BytecodeIndex+2]),
+		p.frame.Pop())
+}
 
-//   doPopArgument: bytecodeIndex = (
-//     frame argument: (frame method bytecode: bytecodeIndex + 1)
-//                 at: (frame method bytecode: bytecodeIndex + 2)
-//                put: frame pop
-//   )
+// doPopArgument: bytecodeIndex = (
+//
+//	frame argument: (frame method bytecode: bytecodeIndex + 1)
+//	            at: (frame method bytecode: bytecodeIndex + 2)
+//	           put: frame pop
+//
+// )
+func (p *Interpreter) DoPopArgument(bytecodeIndex int32) {
+	p.frame.PutArgumentAt(int32(p.frame.Method.Bytecodes[p.frame.BytecodeIndex+1]),
+		int32(p.frame.Method.Bytecodes[p.frame.BytecodeIndex+2]),
+		p.frame.Pop())
+}
 
 //   doPopField: bytecodeIndex = (
 //     | fieldIndex |
 //     fieldIndex := frame method bytecode: bytecodeIndex + 1.
 
-//     "Set the field with the computed index to the value popped from the stack"
-//     self getSelf field: fieldIndex put: frame pop
-//   )
+//	"Set the field with the computed index to the value popped from the stack"
+//	self getSelf field: fieldIndex put: frame pop
+//
+// )
+func (p *Interpreter) DoPopField(bytecodeIndex int32) {
+	fieldIndex := p.frame.Method.Bytecodes[bytecodeIndex+1]
+	p.GetSelf().Fields[fieldIndex] = p.frame.Pop()
+}
 
-//   doSend: bytecodeIndex = (
-//     | signature numberOfArguments receiver |
-//     signature := frame method constant: bytecodeIndex.
-//     numberOfArguments := signature numberOfSignatureArguments.
-//     receiver := frame stackElement: numberOfArguments - 1.
-//     self send: signature rcvrClass: (receiver somClassIn: universe)
-//   )
+// doSend: bytecodeIndex = (
+//
+//	| signature numberOfArguments receiver |
+//	signature := frame method constant: bytecodeIndex.
+//	numberOfArguments := signature numberOfSignatureArguments.
+//	receiver := frame stackElement: numberOfArguments - 1.
+//	self send: signature rcvrClass: (receiver somClassIn: universe)
+//
+// )
+func (p *Interpreter) DoSend(bytecodeIndex int32) {
+	signature := p.frame.Method.Constant(bytecodeIndex)
+	nargs := signature.Nfields
+	receiver := p.frame.Stack[nargs-1]
+	p.Send(signature.Name, receiver.SomClassIn(p.universe))
+}
+
+// send: selector rcvrClass: receiverClass = (
+//
+//	  | invokable |
+//	  invokable := receiverClass lookupInvokable: selector.
+//	  self activate: invokable orDnu: selector
+//	)
+func (p *Interpreter) Send(selector string, receiverClass *Class) {
+	invokable := receiverClass.LookupInvokable(selector)
+	p.ActivateOrDNU(invokable, selector)
+}
 
 //   doSuperSend: bytecodeIndex = (
 //     | signature holderSuper invokable |
@@ -629,86 +701,91 @@ func (p *Interpreter) DoPushBlock(bytecodeIndex int32) {
 //     self popFrameAndPushResult: result
 //   )
 
-//   start = (
-//     [true] whileTrue: [
-//       | bytecodeIndex bytecode bytecodeLength nextBytecodeIndex result |
-//       bytecodeIndex := frame bytecodeIndex.
-//       bytecode := frame method bytecode: bytecodeIndex.
-//       bytecodeLength := Bytecodes length: bytecode.
-//       nextBytecodeIndex := bytecodeIndex + bytecodeLength.
-//       frame bytecodeIndex: nextBytecodeIndex.
+func (p *Interpreter) Start() {
+	//     [true] whileTrue: [
+	for {
+		//       | bytecodeIndex bytecode bytecodeLength nextBytecodeIndex result |
+		//       bytecodeIndex := frame bytecodeIndex.
+		//       bytecode := frame method bytecode: bytecodeIndex.
+		//       bytecodeLength := Bytecodes length: bytecode.
+		//       nextBytecodeIndex := bytecodeIndex + bytecodeLength.
+		//       frame bytecodeIndex: nextBytecodeIndex.
 
-//       result := self dispatch: bytecode idx: bytecodeIndex.
-//       result ~= nil
-//         ifTrue: [ ^ result ] ]
-//   )
+		//       result := self dispatch: bytecode idx: bytecodeIndex.
+		//       result ~= nil
+		//         ifTrue: [ ^ result ] ]
+		//   )
+	}
+}
 
-//   dispatch: bytecode idx: bytecodeIndex = (
-//     bytecode == #halt ifTrue: [
-//       ^ frame stackElement: 0 ].
+func (p *Interpreter) Dispatch(bytecode byte, index byte) {
+	//   dispatch: bytecode idx: bytecodeIndex = (
+	//     bytecode == #halt ifTrue: [
+	//       ^ frame stackElement: 0 ].
 
-//     bytecode == #dup ifTrue: [
-//       self doDup.
-//       ^ nil ].
+	//     bytecode == #dup ifTrue: [
+	//       self doDup.
+	//       ^ nil ].
 
-//     bytecode == #pushLocal ifTrue: [
-//       self doPushLocal: bytecodeIndex.
-//       ^ nil ].
+	//     bytecode == #pushLocal ifTrue: [
+	//       self doPushLocal: bytecodeIndex.
+	//       ^ nil ].
 
-//     bytecode == #pushArgument ifTrue: [
-//       self doPushArgument: bytecodeIndex.
-//       ^ nil ].
+	//     bytecode == #pushArgument ifTrue: [
+	//       self doPushArgument: bytecodeIndex.
+	//       ^ nil ].
 
-//     bytecode == #pushField ifTrue: [
-//       self doPushField: bytecodeIndex.
-//       ^ nil ].
+	//     bytecode == #pushField ifTrue: [
+	//       self doPushField: bytecodeIndex.
+	//       ^ nil ].
 
-//     bytecode == #pushBlock ifTrue: [
-//       self doPushBlock: bytecodeIndex.
-//       ^ nil ].
+	//     bytecode == #pushBlock ifTrue: [
+	//       self doPushBlock: bytecodeIndex.
+	//       ^ nil ].
 
-//     bytecode == #pushConstant ifTrue: [
-//       self doPushConstant: bytecodeIndex.
-//       ^ nil ].
+	//     bytecode == #pushConstant ifTrue: [
+	//       self doPushConstant: bytecodeIndex.
+	//       ^ nil ].
 
-//     bytecode == #pushGlobal ifTrue: [
-//       self doPushGlobal: bytecodeIndex.
-//       ^ nil ].
+	//     bytecode == #pushGlobal ifTrue: [
+	//       self doPushGlobal: bytecodeIndex.
+	//       ^ nil ].
 
-//     bytecode == #pop ifTrue: [
-//       self doPop.
-//       ^ nil ].
+	//     bytecode == #pop ifTrue: [
+	//       self doPop.
+	//       ^ nil ].
 
-//     bytecode == #popLocal ifTrue: [
-//       self doPopLocal: bytecodeIndex.
-//       ^ nil ].
+	//     bytecode == #popLocal ifTrue: [
+	//       self doPopLocal: bytecodeIndex.
+	//       ^ nil ].
 
-//     bytecode == #popArgument ifTrue: [
-//       self doPopArgument: bytecodeIndex.
-//       ^ nil ].
+	//     bytecode == #popArgument ifTrue: [
+	//       self doPopArgument: bytecodeIndex.
+	//       ^ nil ].
 
-//     bytecode == #popField ifTrue: [
-//       self doPopField: bytecodeIndex.
-//       ^ nil ].
+	//     bytecode == #popField ifTrue: [
+	//       self doPopField: bytecodeIndex.
+	//       ^ nil ].
 
-//     bytecode == #send ifTrue: [
-//       self doSend: bytecodeIndex.
-//       ^ nil ].
+	//     bytecode == #send ifTrue: [
+	//       self doSend: bytecodeIndex.
+	//       ^ nil ].
 
-//     bytecode == #superSend ifTrue: [
-//       self doSuperSend: bytecodeIndex.
-//       ^ nil ].
+	//     bytecode == #superSend ifTrue: [
+	//       self doSuperSend: bytecodeIndex.
+	//       ^ nil ].
 
-//     bytecode == #returnLocal ifTrue: [
-//       self doReturnLocal.
-//       ^ nil ].
+	//     bytecode == #returnLocal ifTrue: [
+	//       self doReturnLocal.
+	//       ^ nil ].
 
-//     bytecode == #returnNonLocal ifTrue: [
-//       self doReturnNonLocal.
-//       ^ nil ].
+	//     bytecode == #returnNonLocal ifTrue: [
+	//       self doReturnNonLocal.
+	//       ^ nil ].
 
-//     self error: 'Unknown bytecode' + bytecode asString
-//   )
+	//     self error: 'Unknown bytecode' + bytecode asString
+	log.Println("Unknown Bytecode " + string(bytecode))
+}
 
 //   pushNewFrame: method with: contextFrame = (
 //     frame := universe newFrame: frame with: method with: contextFrame.
@@ -734,7 +811,7 @@ func (p *Interpreter) DoPushBlock(bytecodeIndex int32) {
 //
 // )
 func (p *Interpreter) GetSelf() *Object {
-	return p.frame.OuterContext().GetArgumentAt(1, 0)
+	return p.frame.OuterContext().ArgumentAt(1, 0)
 }
 
 //   send: selector rcvrClass: receiverClass = (
