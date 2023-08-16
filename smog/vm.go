@@ -224,6 +224,50 @@ func (u *Universe) NewInstance(c *Class) *Object {
 	return result
 }
 
+// newBlock: method with: context numArgs: arguments = (
+//     ^ SBlock new: method in: context with: (self blockClass: arguments)
+//   )
+func (u *Universe) NewBlock(m *Method, context *Frame, numArgs int32) *Block {
+	result := NewBlock(m, context, u.blockClass(numArgs))
+	return result
+}
+
+func (u *Universe) blockClass(numArgs int32) *Class {
+	name := u.symbolFor("Block"+numArgs)
+	if g, ok := u.globals(name), ok {
+		return g.Clazz
+	}
+	result := u.LoadClass(name, nil)
+	// "Add the appropriate value primitive to the block class"
+	result.AddInstancePrimitive()
+//       (SBlock evaluationPrimitive: numberOfArguments in: self).
+
+	u.globals[name] = result
+	return result
+
+}
+// blockClass: numberOfArguments = (
+//     | name result |
+//     "Determine the name of the block class with the given number of arguments"
+//     name := self symbolFor: 'Block' + numberOfArguments.
+
+//     "Lookup the block class in the dictionary of globals and return it"
+//     (self hasGlobal: name) ifTrue: [
+//       ^ self global: name ].
+
+//     result := self loadClass: name into: nil.
+
+//     "Add the appropriate value primitive to the block class"
+//     result addInstancePrimitive:
+//       (SBlock evaluationPrimitive: numberOfArguments in: self).
+
+//     self global: name put: result.
+//     ^ result
+//   )
+
+
+
+
 type Interpreter struct {
 	universe *Universe
 	frame    *Frame
@@ -277,27 +321,27 @@ func NewFrame() *Frame {
 
 func (f *Frame) Initialize(aNil *Object, prevFrame *Frame, contextFrame *Frame, aMethod *Method, maxStack int32) {
 	f.PreviousFrame = prevFrame
-	f.ContextObj = contextFrame
+	f.Context = contextFrame
 	f.Method = aMethod
 	f.Stack = make([]*Object, maxStack)
 	f.ResetStackPointer()
 	f.BytecodeIndex = 1 // should be Zero?
 }
 
-func (f *Frame) GetPreviousFrame() *Frame { return f.PreviousFrame }
+//func (f *Frame) GetPreviousFrame() *Frame { return f.PreviousFrame }
 
 func (f *Frame) ClearPreviousFrame()    { f.PreviousFrame = nil }
 func (f *Frame) HasPreviousFrame() bool { return f.PreviousFrame != nil }
 func (f *Frame) IsBootstrapFrame() bool { return !f.HasPreviousFrame() }
 
-func (f *Frame) GetContext() *Frame {
-	return f.ContextObj
-}
+// func (f *Frame) GetContext() *Frame {
+// 	return f.Context
+// }
 
-func (f *Frame) HasContext() bool { return f.ContextObj != nil }
+func (f *Frame) HasContext() bool { return f.Context != nil }
 
 // "Get the context frame at the given level"
-func (f *Frame) GetContextAt(level int32) *Frame {
+func (f *Frame) ContextAt(level int32) *Frame {
 	frame := f
 	// "Iterate through the context chain until the given level is reached"
 	for level > 0 {
@@ -314,14 +358,14 @@ func (f *Frame) OuterContext() *Frame {
 	frame := f
 	//     "Iterate through the context chain until null is reached"
 	for frame.HasContext() {
-		frame = frame.GetContext()
+		frame = frame.Context
 	}
 	return frame
 }
 
-func (f *Frame) GetMethod() *Method {
-	return f.Method
-}
+// func (f *Frame) GetMethod() *Method {
+// 	return f.Method
+// }
 
 // "Pop an object from the expression stack and return it"
 func (f *Frame) Pop() *Object {
@@ -347,9 +391,9 @@ func (f *Frame) ResetStackPointer() {
 //	"Get the current bytecode index for this frame"
 //
 // OR just call f.BytecodeIndex
-func (f *Frame) GetBytecodeIndex() int32 {
-	return f.BytecodeIndex
-}
+// func (f *Frame) GetBytecodeIndex() int32 {
+// 	return f.BytecodeIndex
+// }
 
 // "Set the current bytecode index for this frame"
 func (f *Frame) SetBytecodeIndex(index int32) {
@@ -359,9 +403,9 @@ func (f *Frame) SetBytecodeIndex(index int32) {
 // "Get the stack element with the given index
 //
 //	(an index of zero yields the top element)"
-func (f *Frame) GetStackElement(index int32) *Object {
-	return f.Stack[index]
-}
+// func (f *Frame) GetStackElement(index int32) *Object {
+// 	return f.Stack[index]
+// }
 
 // "Set the stack element with the given index to the given value
 //
@@ -371,14 +415,14 @@ func (f *Frame) PutStackElement(index int32, value *Object) {
 }
 
 // Locals
-func (f *Frame) GetLocal(index int32) *Object {
+func (f *Frame) Local(index int32) *Object {
 	return f.Stack[f.LocalOffset+index+1]
 }
 func (f *Frame) PutLocal(index int32, value *Object) {
 	f.Stack[f.LocalOffset+index-1] = value
 }
 
-func (f *Frame) GetLocalAt(index int32, level int32) *Object {
+func (f *Frame) LocalAt(index int32, level int32) *Object {
 	return f.GetContextAt(level).GetLocal(index)
 }
 func (f *Frame) PutLocalAt(index int32, level int32, value *Object) {
@@ -386,14 +430,14 @@ func (f *Frame) PutLocalAt(index int32, level int32, value *Object) {
 }
 
 // Arguments
-func (f *Frame) GetArgument(index int32) *Object {
+func (f *Frame) Argument(index int32) *Object {
 	return f.Stack[index]
 }
 func (f *Frame) PutArgument(index int32, value *Object) {
 	f.Stack[index] = value
 }
 
-func (f *Frame) GetArgumentAt(index int32, level int32) *Object {
+func (f *Frame) ArgumentAt(index int32, level int32) *Object {
 	return f.GetContextAt(level).GetArgument(index)
 }
 func (f *Frame) PutArgumentAt(index int32, level int32, value *Object) {
@@ -406,7 +450,7 @@ func (f *Frame) PutArgumentAt(index int32, level int32, value *Object) {
 func (f *Frame) CopyArgumentsFrom(frame *Frame) {
 	numArgs := len(f.Method.Array.Fields)
 	for i := 0; i < numArgs-1; i++ {
-		f.Stack[i+1] = frame.GetStackElement(int32(numArgs - 1 - i))
+		f.Stack[i+1] = frame.StackElement[int32(numArgs - 1 - i)]
 	}
 }
 
@@ -423,7 +467,7 @@ func (f *Frame) PrintStackTrace() {
 // INTERPRETER
 
 func (p *Interpreter) DoDup() {
-	p.frame.Push(p.frame.GetStackElement(0))
+	p.frame.Push(p.frame.StackElement[0])
 }
 
 // doPushLocal: bytecodeIndex = (
@@ -435,33 +479,35 @@ func (p *Interpreter) DoDup() {
 // )
 func (p *Interpreter) DoPushLocal(bytecodeIndex int32) {
 	p.frame.Push(
-		p.frame.GetLocalAt(p.frame.GetMethod().GetBytecode(p.frame.BytecodeIndex+1),
-			p.frame.GetMethod().GetBytecode(p.frame.BytecodeIndex+2)))
+		p.frame.LocalAt(p.frame.Method.Bytecodes[p.frame.BytecodeIndex+1],
+			p.frame.Method.Bytecodes[p.frame.BytecodeIndex+2]))
 }
 
-//   doPushArgument: bytecodeIndex = (
-//     frame push: (
-//         frame argument: (frame method bytecode: bytecodeIndex + 1)
-//                     at: (frame method bytecode: bytecodeIndex + 2))
-//   )
+// doPushArgument: bytecodeIndex = (
+//
+//	frame push: (
+//	    frame argument: (frame method bytecode: bytecodeIndex + 1)
+//	                at: (frame method bytecode: bytecodeIndex + 2))
+//
+// )
 func (p *Interpreter) DoPushArgument(bytecodeIndex int32) {
 	p.frame.Push(
-		p.frame.GetArgumentAt(p.frame.GetMethod().GetBytecode(p.frame.BytecodeIndex+1),
-			p.frame.GetMethod().GetBytecode(p.frame.BytecodeIndex+2)))
+		p.frame.ArgumentAt(p.frame.Method.Bytecodes[p.frame.BytecodeIndex+1],
+			p.frame.Method.Bytecodes[p.frame.BytecodeIndex+2]))
 }
 
 //   doPushField: bytecodeIndex = (
 //     | fieldIndex |
 //     fieldIndex := frame method bytecode: bytecodeIndex + 1.
 
-//     "Push the field with the computed index onto the stack"
-//     frame push: (self getSelf field: fieldIndex)
-//   )
+//	"Push the field with the computed index onto the stack"
+//	frame push: (self getSelf field: fieldIndex)
+//
+// )
 func (p *Interpreter) DoPushField(bytecodeIndex int32) {
-	fieldIndex := p.frame.GetMethod().GetBytecode(p.frame.BytecodeIndex+1)
+	fieldIndex := p.frame.Method.Bytecodes[p.frame.BytecodeIndex + 1]
 	p.frame.Push(p.GetSelf().Field(fieldIndex))
 }
-
 
 //     blockMethod := frame method constant: bytecodeIndex.
 
@@ -471,12 +517,11 @@ func (p *Interpreter) DoPushField(bytecodeIndex int32) {
 //                   numArgs: blockMethod numberOfArguments)
 //   )
 
-//     "Push a new block with the current frame as context onto the stack"
+// "Push a new block with the current frame as context onto the stack"
 func (p *Interpreter) DoPushBlock(bytecodeIndex int32) {
-	blockMethod := p.frame.Method.GetConstant(bytecodeIndex)
-	p.frame.Push(u.NewB)
+	blockMethod := p.frame.Method.Constant[bytecodeIndex]
+	p.frame.Push(p.universe.NewBlock(blockMethod, p.frame, p.frame.Method.NumberOfArguments()))
 }
-
 
 //   doPushConstant: bytecodeIndex = (
 //     frame push: (frame method constant: bytecodeIndex)
@@ -682,13 +727,16 @@ func (p *Interpreter) DoPushBlock(bytecodeIndex int32) {
 //     ^ frame method
 //   )
 
-//   getSelf = (
-//     "Get the self object from the interpreter"
-//     ^ frame outerContext argument: 1 at: 0
-//   )
+// getSelf = (
+//
+//	"Get the self object from the interpreter"
+//	^ frame outerContext argument: 1 at: 0
+//
+// )
 func (p *Interpreter) GetSelf() *Object {
-	return p.frame.OuterContext().GetArgumentAt(1,0)
+	return p.frame.OuterContext().GetArgumentAt(1, 0)
 }
+
 //   send: selector rcvrClass: receiverClass = (
 //     | invokable |
 //     invokable := receiverClass lookupInvokable: selector.

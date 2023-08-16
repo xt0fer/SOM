@@ -84,8 +84,9 @@ type ArrayInterface interface {
 // The Data Model (Objects everywhere)
 
 type Object struct {
-	Fields []*Object // local vars (any object) index of field is same as index of Class.InstanceFields
-	Clazz  *Class
+	Fields  []*Object // local vars (any object) index of field is same as index of Class.InstanceFields
+	Nfields int32
+	Clazz   *Class
 }
 
 type Class struct {
@@ -104,26 +105,26 @@ type Symbol struct { // used for SomSymbol as well as model string
 
 type Array struct { // used for a SomArray data structure, not used within the Data Model
 	*Object
-	Fields []*Object
+	Elements []*Object
 }
 type String struct { // used to model a SomString
-	strValue string
+	Value string
 }
 type Integer struct {
-	integerValue int32
+	Value int32
 }
 type Double struct {
-	doubleValue float64
+	Value float64
 }
 
 type Method struct {
-	*Array                         // used to store the method local objects
-	Sig                  *Symbol   // symbol with method signature in it
-	Hold                 *Object   // what Class is this attached to?
-	Bytecodes            []byte    // bytecode array, code to be run when method invoked.
-	Literals             []*Object // array of symbols as literals #()
-	NumOfLocals          int32     // number of local objects
-	MaximumStackElements int32     // limit on Stack??
+	*Array                     // used to store the method local objects
+	Signature        *Symbol   // symbol with method signature in it
+	Holder           *Object   // what Class is this attached to?
+	Bytecodes        []byte    // bytecode array, code to be run when method invoked.
+	Literals         []*Object // array of symbols as literals #()
+	NumLocals        int32     // number of local objects
+	MaxStackElements int32     // limit on Stack??
 }
 
 // For instance, in usage,
@@ -146,6 +147,7 @@ type Block struct { // not sure what these are just yet
 func NewObject(n int32, with *Object) *Object {
 	so := &Object{}
 	so.Fields = make([]*Object, n)
+	so.Nfields = n
 	so.initializeWith(n, with)
 	return so
 }
@@ -166,28 +168,34 @@ func (receiver *Object) SendUnknownGlobal(globalName Object, universe *Universe,
 func (receiver *Object) SendEscapedBlock(block Object, universe *Universe, interpreter *Interpreter) {
 }
 
-func (so *Object) SomClass() *Class {
-	return so.Clazz
-}
+// func (so *Object) SomClass() *Class {
+// 	return so.Clazz
+// }
 
-func (so *Object) SetSomClass(aSClass *Class) {
-	so.Clazz = aSClass
-}
+//	func (so *Object) SetSomClass(aSClass *Class) {
+//		so.Clazz = aSClass
+//	}
 func (so *Object) SomClassIn(u *Universe) *Class {
 	return so.Clazz
 }
-func (so *Object) FieldName(index int32) string {
-	return "" //so.Clazz.fieldName(index)
+func (so *Object) FieldName(index int32) *Symbol {
+	return so.Clazz.InstanceFields[index]
 }
 func (so *Object) FieldIndex(name string) int32 {
-	return 0 //so.Clazz.fieldIndex(name)
+	for i, v := range so.Clazz.InstanceFields {
+		if v.Name == name {
+			return int32(i)
+		}
+	}
+	return -1
 }
-func (so *Object) Field(index int32) *Object {
-	return so.Fields[index]
-}
-func (so *Object) SetField(index int32, value *Object) {
-	so.Fields[index] = value
-}
+
+// func (so *Object) Field(index int32) *Object {
+// 	return so.Fields[index]
+// }
+// func (so *Object) SetField(index int32, value *Object) {
+// 	so.Fields[index] = value
+// }
 
 // ??
 type Invokable *Object
@@ -207,12 +215,12 @@ func (sc *Class) setSuperClass(nc *Class) {
 }
 
 // setName
-func (sc *Class) SetName(sym *Symbol) {
-	sc.Name = sym
-}
-func (sc *Class) GetName() *Symbol {
-	return sc.Name
-}
+// func (sc *Class) SetName(sym *Symbol) {
+// 	sc.Name = sym
+// }
+// func (sc *Class) GetName() *Symbol {
+// 	return sc.Name
+// }
 
 // SetInstancesFields
 func (sc *Class) SetInstancesFields(size int32) {
@@ -244,14 +252,14 @@ func NewString(aString string) *String {
 }
 
 func (s *String) Initialize(aString string) {
-	s.strValue = aString
+	s.Value = aString
 }
 
-func (S *String) StringValue() string { return S.strValue }
+func (S *String) StringValue() string { return S.Value }
 
 // "For using in debugging tools such as the Diassembler"
 func (S *String) DebugString() string {
-	t := "String(" + S.strValue + ")"
+	t := "String(" + S.Value + ")"
 	return t
 }
 
@@ -266,14 +274,14 @@ func NewInteger(n int32) *Integer {
 }
 
 func (s *Integer) Initialize(n int32) {
-	s.integerValue = n
+	s.Value = n
 }
 
-func (i *Integer) IntegerValue() int32 { return i.integerValue }
+func (i *Integer) IntegerValue() int32 { return i.Value }
 
 // "For using in debugging tools such as the Diassembler"
 func (i *Integer) DebugString() string {
-	t := "Integer(" + fmt.Sprintf("%v", i.integerValue) + ")"
+	t := "Integer(" + fmt.Sprintf("%v", i.Value) + ")"
 	return t
 }
 
@@ -288,14 +296,14 @@ func NewDouble(n float64) *Double {
 }
 
 func (d *Double) Initialize(n float64) {
-	d.doubleValue = n
+	d.Value = n
 }
 
-func (d *Double) DoubleValue() float64 { return d.doubleValue }
+func (d *Double) DoubleValue() float64 { return d.Value }
 
 // "For using in debugging tools such as the Diassembler"
 func (d *Double) DebugString() string {
-	t := "Double(" + fmt.Sprintf("%v", d.doubleValue) + ")"
+	t := "Double(" + fmt.Sprintf("%v", d.Value) + ")"
 	return t
 }
 
@@ -313,39 +321,39 @@ func NewMethod() *Method {
 // array of literals, NQR
 func (m *Method) InitializeWith(sym *Symbol, bcArray []byte, literalsArray []*Object,
 	numLocals int32, maxStack int32) {
-	m.Sig = sym
+	m.Signature = sym
 	m.Bytecodes = bcArray
 	m.Literals = literalsArray
-	m.NumOfLocals = numLocals
-	m.MaximumStackElements = maxStack
+	m.NumLocals = numLocals
+	m.MaxStackElements = maxStack
 }
 
-func (m *Method) GetBytecode(index int32) int32 {
-	return int32(m.Bytecodes[index])
-}
+// func (m *Method) GetBytecode(index int32) int32 {
+// 	return int32(m.Bytecodes[index])
+// }
 
 func (m *Method) IsPrimitive() bool {
 	return false
 }
 
-func (m *Method) NumberOfLocals() int32 {
-	return m.NumOfLocals
-}
+// func (m *Method) NumberOfLocals() int32 {
+// 	return m.NumOfLocals
+// }
 
-func (m *Method) MaximumNumberOfStackElements() int32 {
-	return m.MaximumStackElements
-}
+// func (m *Method) MaximumNumberOfStackElements() int32 {
+// 	return m.MaximumStackElements
+// }
 
-func (m *Method) Signature() *Symbol {
-	return m.Sig
-}
+// func (m *Method) Signature() *Symbol {
+// 	return m.Sig
+// }
 
-func (m *Method) Holder() *Object {
-	return m.Hold
-}
+// func (m *Method) Holder() *Object {
+// 	return m.Hold
+// }
 
 func (m *Method) SetHolder(h *Object) {
-	m.Hold = h
+	m.Holder = h
 
 	// literals == nil ifTrue: [ ^ self ].
 	if m.Literals == nil {
@@ -365,8 +373,8 @@ func (m *Method) GetConstant(bytecodeIndex int32) *Object {
 	return m.Literals[m.Bytecodes[bytecodeIndex+1]]
 }
 
-func (m *Method) NumberOfArgument() int32 {
-	return m.Sig.NumOfArgs
+func (m *Method) NumberOfArguments() int32 {
+	return m.Signature.NumOfArgs
 }
 
 func (m *Method) NumberOfBytecodes() int32 {
@@ -387,9 +395,9 @@ func (m *Method) BytecodeAt(index int32) int32 {
 //
 //	"Allocate and push a new frame on the interpreter stack"
 func (m *Method) InvokeUsing(frame *Frame, interpreter *Interpreter) {
-	newFrame := interpreter.PushNewFrame(m)
+	// newFrame := interpreter.PushNewFrame(m)
 
-	newFrame.CopyArgumentsFrom(frame)
+	// newFrame.CopyArgumentsFrom(frame)
 }
 
 func (m *Method) SomClassIn(u *Universe) *Class {
@@ -399,7 +407,7 @@ func (m *Method) SomClassIn(u *Universe) *Class {
 // "For using in debugging tools such as the Diassembler"
 // debugString = ( ^ 'SMethod(' + holder name + '>>#' + signature string + ')' )
 func (m *Method) DebugString() {
-	log.Printf("Method(%s>>#%s)\n", m.Holder().Clazz.Name.Name, m.Sig.Name)
+	log.Printf("Method(%s>>#%s)\n", m.Holder.Clazz.Name.Name, m.Signature.Name)
 }
 
 // BLOCK
@@ -434,9 +442,9 @@ func (nb *Block) SomClassIn() *Class {
 	return nb.BlockClass
 }
 
-// 	"For using in debugging tools such as the Diassembler"
+// "For using in debugging tools such as the Diassembler"
 func (m *Block) DebugString() {
-	log.Printf("Block(%s>>#%s)\n", m.Method.Sig.Name)
+	log.Printf("Block(%s>>#%s)\n", m.Method.Signature.Name)
 }
 
 // 	evaluationPrimitive: numberOfArguments in: universe = (
@@ -461,7 +469,7 @@ func (nb *Block) ComputeSignatureString(nArgs int32) string {
 	if nArgs > 1 {
 		signatureString = signatureString + ":"
 	}
-	for i := 2; i< int(nArgs); i++ {
+	for i := 2; i < int(nArgs); i++ {
 		signatureString = signatureString + "with:"
 	}
 	return signatureString
